@@ -107,6 +107,14 @@ public:
         m_simulateSelectionModifierHintEnabled = settings.value(_key_thumbnails_simulate_key_press_hint, _key_thumbnails_simulate_key_press_hint_def).toBool();
 
         m_DontUseNativeDialog = settings.value(_key_dont_use_native_dialog, _key_dont_use_native_dialog_def).toBool();
+
+        m_djvu_pages_subfolder= settings.value(_key_djvu_pages_subfolder, _key_djvu_pages_subfolder_def).toString();
+        m_djvu_pages_per_djbz = settings.value(_key_djvu_pages_per_djbz, _key_djvu_pages_per_djbz_def).toInt();
+        m_djvu_djbz_match = settings.value(_key_djvu_djbz_match, _key_djvu_djbz_match_def).toBool();
+        m_djvu_djbz_use_prototypes = settings.value(_key_djvu_djbz_use_prototypes, _key_djvu_djbz_use_prototypes_def).toBool();
+        m_djvu_djbz_use_averaging = settings.value(_key_djvu_djbz_use_averaging, _key_djvu_djbz_use_averaging_def).toBool();
+        m_djvu_djbz_aggression = settings.value(_key_djvu_djbz_aggression, _key_djvu_djbz_aggression_def).toInt();
+        m_djvu_djbz_classifier = settings.value(_key_djvu_djbz_classifier, _key_djvu_djbz_classifier_def).toInt();
     }
 
     static void updateHotkeys()
@@ -255,6 +263,14 @@ public:
     static bool m_inversePageOrder;
 
     static bool m_DontUseNativeDialog;
+
+    static QString m_djvu_pages_subfolder;
+    static int m_djvu_pages_per_djbz;
+    static bool m_djvu_djbz_match;
+    static bool m_djvu_djbz_use_prototypes;
+    static bool m_djvu_djbz_use_averaging;
+    static int m_djvu_djbz_aggression;
+    static int m_djvu_djbz_classifier;
 };
 
 #endif // GLOBALSTATICSETTINGS_H

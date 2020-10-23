@@ -23,7 +23,7 @@
 #include "RefCountable.h"
 #include "FilterResult.h"
 #include "IntrusivePtr.h"
-#include "ImageId.h"
+#include "PageId.h"
 
 class TaskStatus;
 class FilterData;
@@ -34,16 +34,18 @@ namespace publish
 
 class Filter;
 class Settings;
+class DjbzDispatcher;
 
 class Task : public RefCountable
 {
     DECLARE_NON_COPYABLE(Task)
-public:
-    Task(
-        QString const& filename,
-        IntrusivePtr<Filter> const& filter,
-        IntrusivePtr<Settings> const& settings,
-        bool batch_processing);
+    public:
+        Task(QString const& filename,
+             const PageId &page_id,
+             IntrusivePtr<Filter> const& filter,
+             IntrusivePtr<Settings> const& settings,
+             DjbzDispatcher& djbzDispatcher,
+             bool batch_processing);
 
     virtual ~Task();
 
@@ -51,10 +53,13 @@ public:
 private:
     class UiUpdater;
 
+    QString m_filename;
+    PageId m_pageId;
     IntrusivePtr<Filter> m_ptrFilter;
     IntrusivePtr<Settings> m_ptrSettings;
-    QString m_filename;
+    DjbzDispatcher& m_refDjbzDispatcher;
     bool m_batchProcessing;
+
 };
 
 } // namespace publish

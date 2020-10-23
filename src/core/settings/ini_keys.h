@@ -22,6 +22,7 @@
 #include <QSettings> // propagate header
 
 #include "../filters/output/DespeckleLevel.h"
+#include "../filters/publish/DjbzDispatcher.h"
 #include "../../exporting/ExportModes.h"
 #include <QSize>
 
@@ -253,5 +254,22 @@ static const char* _key_foreground_layer_adj_override = "foreground_layer_adj_ov
 static const int _key_foreground_layer_adj_override_def = 0;
 static const char* _key_mouse_ignore_system_wheel_settings = "mouse/ignore_system_wheel_settings";
 static const bool _key_mouse_ignore_system_wheel_settings_def = true;
+
+// DjVu
+
+static const char* _key_djvu_pages_subfolder = "djvu_pages_subfolder";
+static const char* _key_djvu_pages_subfolder_def = "djvu";
+static const char* _key_djvu_pages_per_djbz = "djvu_pages_per_djbz";
+static const int _key_djvu_pages_per_djbz_def = 20;
+static const char* _key_djvu_djbz_match = "djvu_djbz_match";
+static const bool _key_djvu_djbz_match_def = true;
+static const char* _key_djvu_djbz_use_prototypes = "djvu_djbz_use_prototypes";
+static const bool _key_djvu_djbz_use_prototypes_def = true;
+static const char* _key_djvu_djbz_use_averaging = "djvu_djbz_use_averaging";
+static const bool _key_djvu_djbz_use_averaging_def = false;
+static const char* _key_djvu_djbz_aggression = "djvu_djbz_aggression";
+static const int _key_djvu_djbz_aggression_def = 100;
+static const char* _key_djvu_djbz_classifier = "djvu_djbz_classifier";
+static const int _key_djvu_djbz_classifier_def = publish::DjbzParams::ClassifierType::MaximalScan;
 
 #endif // INI_KEYS_H

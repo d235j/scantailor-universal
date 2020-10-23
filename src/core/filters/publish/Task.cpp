@@ -25,7 +25,9 @@
 #include "TaskStatus.h"
 #include "ImageView.h"
 #include "FilterUiInterface.h"
-#include <QImage>
+#include "OutputParams.h"
+#include "DjbzDispatcher.h"
+
 #include <iostream>
 
 namespace publish
@@ -50,14 +52,19 @@ private:
 };
 
 Task::Task(
-    QString const& filename,
-    IntrusivePtr<Filter> const& filter,
-    IntrusivePtr<Settings> const& settings,
-    bool const batch_processing)
-    :   m_ptrFilter(filter),
-        m_ptrSettings(settings),
-        m_filename(filename),
-        m_batchProcessing(batch_processing)
+        QString const& filename,
+        PageId const& page_id,
+        IntrusivePtr<Filter> const& filter,
+        IntrusivePtr<Settings> const& settings,
+        DjbzDispatcher& djbzDispatcher,
+        bool const batch_processing)
+    :
+      m_filename(filename),
+      m_pageId(page_id),
+      m_ptrFilter(filter),
+      m_ptrSettings(settings),
+      m_refDjbzDispatcher(djbzDispatcher),
+      m_batchProcessing(batch_processing)
 {
 }
 
@@ -68,26 +75,55 @@ Task::~Task()
 FilterResultPtr
 Task::process(TaskStatus const& status, FilterData const& data)
 {
-    // This function is executed from the worker thread.
-
     status.throwIfCancelled();
 
-    return FilterResultPtr(
-               new UiUpdater(
-                   m_ptrFilter, m_filename, m_batchProcessing
-               )
-           );
+    QString djbz_id = m_refDjbzDispatcher.findDjbzForPage(m_pageId);
+    if (djbz_id.isEmpty()) {
+        djbz_id = m_refDjbzDispatcher.addNewPage(m_pageId);
+    }
+
+    const DjbzDict dict = m_refDjbzDispatcher.djbzDictForPage(djbz_id);
+
+    std::unique_ptr<Params> params(m_ptrSettings->getPageParams(m_pageId));
+    bool need_reprocess(!params.get());
+    if (!need_reprocess) {
+        Params::Regenerate val = params->getForceReprocess();
+        need_reprocess = val & Params::RegeneratePage;
+        if (need_reprocess) {
+            val = (Params::Regenerate)(val & ~Params::RegeneratePage);
+            params->setForceReprocess(val);
+        }
+    }
+
+    if (!need_reprocess) {
+        if (params->hasOutputParams()) {
+            OutputParams const output_params_to_use(*params, djbz_id, dict.revision, dict.params());
+            OutputParams const& output_params_was_used(params->outputParams());
+            need_reprocess = !output_params_was_used.matches(output_params_to_use);
+        } else {
+            need_reprocess = true;
+        }
+    }
+
+    if (need_reprocess) {
+        params->setDjbzId(djbz_id);
+        params->setDjbzRevision(dict.revision);
+        params->rememberOutputParams(dict.params());
+    }
+
+
+
 }
 
 /*============================ Task::UiUpdater ========================*/
 
 Task::UiUpdater::UiUpdater(
-    IntrusivePtr<Filter> const& filter,
-    QString const& filename,
-    bool const batch_processing)
+        IntrusivePtr<Filter> const& filter,
+        QString const& filename,
+        bool const batch_processing)
     :   m_ptrFilter(filter),
-        m_filename(filename),
-        m_batchProcessing(batch_processing)
+      m_filename(filename),
+      m_batchProcessing(batch_processing)
 {
 }
 
@@ -101,7 +137,7 @@ Task::UiUpdater::updateUI(FilterUiInterface* ui)
     }
     ui->setOptionsWidget(opt_widget, ui->KEEP_OWNERSHIP);
 
-//    ui->invalidateThumbnail(m_filename);
+    //    ui->invalidateThumbnail(m_filename);
 
     if (m_batchProcessing) {
         return;

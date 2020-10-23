@@ -16,45 +16,42 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef PUBLISH_SETTINGS_H_
-#define PUBLISH_SETTINGS_H_
+#ifndef PUBLISHIMAGEINFO_H
+#define PUBLISHIMAGEINFO_H
 
-#include "RefCountable.h"
-#include "NonCopyable.h"
-#include "Params.h"
-#include <QMutex>
-#include <map>
-
-class AbstractRelinker;
+#include <QImage>
 
 namespace publish
 {
 
-class Settings : public RefCountable
-{
-    DECLARE_NON_COPYABLE(Settings)
-public:
-    Settings();
+struct ImageInfo {
 
-    virtual ~Settings();
+    enum ColorMode {
+        Unknown = 0,
+        BlackAndWhite = 1,
+        Grayscale = 3,
+        Color = 7
+    };
 
-    void setPageParams(PageId const& page_id, Params const& params);
+    ImageInfo(): imageColorMode(Unknown) {}
+    ImageInfo(const QString& filename, const QImage& image);
 
-    void clearPageParams(PageId const& page_id);
+    static QString ColorModeToStr(const ColorMode clr) {
+        switch (clr) {
+        case BlackAndWhite: return "bw";
+        case Grayscale: return "grayscale";
+        case Color: return "color";
+        default: return "";
+        }
+    }
 
-    std::unique_ptr<Params> getPageParams(PageId const& page_id) const;
+    QString fileName;
+    QByteArray imageHash;
+    ColorMode imageColorMode;
 
-    void clear();
-
-    void performRelinking(AbstractRelinker const& relinker);
-
-private:
-    typedef std::map<PageId, Params> PerPageParams;
-
-    mutable QMutex m_mutex;
-    PerPageParams m_perPageParams;
+    bool operator !=(const ImageInfo &other) const;
 };
 
-} // namespace publish
+} //namespace publish
 
-#endif
+#endif // PUBLISHIMAGEINFO_H

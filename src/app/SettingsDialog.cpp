@@ -210,7 +210,7 @@ void check_nested_disabled(QTreeWidgetItem* item)
     QString key = item->data(0, Qt::UserRole + 1).toString();
     bool disable_children = (!key.isEmpty() && item->checkState(1) != Qt::Checked);
 
-    for (int i = 0; i < item->childCount(); i++) {
+    for (int i = 0; i < item->childCount(); i++)     {
         if (disable_children) {
             disable_subtree(item->child(i));
         } else {

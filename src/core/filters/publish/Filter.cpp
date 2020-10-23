@@ -46,7 +46,7 @@ namespace publish
 
 Filter::Filter(IntrusivePtr<ProjectPages> const& pages,
                PageSelectionAccessor const& page_selection_accessor)
-    :   m_ptrPages(pages), m_ptrSettings(new Settings)
+    :   m_ptrPages(pages), m_ptrSettings(new Settings), m_ptrDjbzDispatcher(new DjbzDispatcher)
 {
     if (CommandLine::get().isGui()) {
         m_ptrOptionsWidget.reset(
@@ -94,12 +94,14 @@ Filter::saveSettings(
     ProjectWriter const& writer, QDomDocument& doc) const
 {
     QDomElement filter_el(doc.createElement("publishing"));
-    writer.enumImages(
+    writer.enumPages(
         boost::lambda::bind(
-            &Filter::writeImageSettings,
+            &Filter::writePageSettings,
             this, boost::ref(doc), boost::lambda::var(filter_el), boost::lambda::_1, boost::lambda::_2
         )
     );
+
+    filter_el.appendChild(m_ptrDjbzDispatcher->toXml(doc, "djbz_dispatcher"));
 
     return filter_el;
 }
@@ -110,14 +112,50 @@ Filter::loadSettings(ProjectReader const& reader, QDomElement const& filters_el)
     m_ptrSettings->clear();
 
     QDomElement filter_el(filters_el.namedItem("publishing").toElement());
+    m_ptrDjbzDispatcher.reset(new DjbzDispatcher(
+                                  filters_el.namedItem("djbz_dispatcher").toElement()));
+
+    QString const page_tag_name("page");
+    QDomNode node(filter_el.firstChild());
+    for (; !node.isNull(); node = node.nextSibling()) {
+        if (!node.isElement()) {
+            continue;
+        }
+        if (node.nodeName() != page_tag_name) {
+            continue;
+        }
+        QDomElement const el(node.toElement());
+
+        bool ok = true;
+        int const id = el.attribute("id").toInt(&ok);
+        if (!ok) {
+            continue;
+        }
+
+        PageId const page_id(reader.pageId(id));
+        if (page_id.isNull()) {
+            continue;
+        }
+
+        QDomElement const params_el(el.namedItem("params").toElement());
+        if (params_el.isNull()) {
+            continue;
+        }
+
+        Params const params(params_el);
+        m_ptrSettings->setPageParams(page_id, params);
+    }
 }
 
 void
-Filter::invalidateSetting(PageId const& page)
+Filter::invalidateSetting(PageId const& page_id)
 {
-//  Params p = m_ptrSettings->getParams(page);
-//  p.setForceReprocess(Params::RegenerateAll);
-//  m_ptrSettings->setParams(page, p);
+    std::unique_ptr<Params> const params(m_ptrSettings->getPageParams(page_id));
+    if (params.get()) {
+        Params p(*params.get());
+        p.setForceReprocess(Params::RegenerateAll);
+        m_ptrSettings->setPageParams(page_id, p);
+    }
 }
 
 IntrusivePtr<Task>
@@ -128,8 +166,8 @@ Filter::createTask(
     QString filename;
     return IntrusivePtr<Task>(
                new Task(
-                   filename, IntrusivePtr<Filter>(this),
-                   m_ptrSettings, batch_processing
+                   filename, page_id, IntrusivePtr<Filter>(this),
+                   m_ptrSettings, *m_ptrDjbzDispatcher, batch_processing
                )
            );
 }
@@ -143,17 +181,20 @@ Filter::createCacheDrivenTask()
 }
 
 void
-Filter::writeImageSettings(
+Filter::writePageSettings(
     QDomDocument& doc, QDomElement& filter_el,
-    ImageId const& image_id, int const numeric_id) const
+    PageId const& page_id, int const numeric_id) const
 {
+    std::unique_ptr<Params> const params(m_ptrSettings->getPageParams(page_id));
+    if (!params.get()) {
+        return;
+    }
 
-//  XmlMarshaller marshaller(doc);
+    QDomElement page_el(doc.createElement("page"));
+    page_el.setAttribute("id", numeric_id);
+    page_el.appendChild(params->toXml(doc, "params"));
 
-//  QDomElement image_el(doc.createElement("image"));
-//  image_el.setAttribute("id", numeric_id);
-//  image_el.appendChild(marshaller.rotation(rotation, "rotation"));
-//  filter_el.appendChild(image_el);
+    filter_el.appendChild(page_el);
 }
 
 } // namespace publish

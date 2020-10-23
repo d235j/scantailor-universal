@@ -26,8 +26,10 @@
 #include "FilterResult.h"
 #include "SafeDeletingQObjectPtr.h"
 #include "ProjectPages.h"
+#include "DjbzDispatcher.h"
 #include <QCoreApplication>
 #include <QImage>
+#include <memory> // std::unique_ptr
 
 class PageId;
 class PageSelectionAccessor;
@@ -70,7 +72,7 @@ public:
     virtual void loadSettings(
         ProjectReader const& reader, QDomElement const& filters_el);
 
-    virtual void invalidateSetting(PageId const& page);
+    virtual void invalidateSetting(PageId const& page_id);
 
     IntrusivePtr<Task> createTask(
         PageId const& page_id,
@@ -88,12 +90,12 @@ public:
         return m_ptrSettings.get();
     }
 private:
-    void writeImageSettings(
-        QDomDocument& doc, QDomElement& filter_el,
-        ImageId const& image_id, int numeric_id) const;
+    void writePageSettings(QDomDocument& doc, QDomElement& filter_el,
+        const PageId &page_id, int numeric_id) const;
 
     IntrusivePtr<ProjectPages> m_ptrPages;
     IntrusivePtr<Settings> m_ptrSettings;
+    std::unique_ptr<DjbzDispatcher> m_ptrDjbzDispatcher;
     SafeDeletingQObjectPtr<OptionsWidget> m_ptrOptionsWidget;
 };
 

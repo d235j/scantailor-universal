@@ -1,5 +1,6 @@
 /*
-    Scan Tailor - Interactive post-processing tool for scanned pages.
+    Scan Tailor Universal - Interactive post-processing tool for scanned
+    pages. A fork of Scan Tailor by Joseph Artsimovich.
     Copyright (C) 2020 Alexander Trufanov <trufanovan@gmail.com>
 
     This program is free software: you can redistribute it and/or modify
@@ -16,43 +17,43 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef PUBLISH_SETTINGS_H_
-#define PUBLISH_SETTINGS_H_
 
-#include "RefCountable.h"
-#include "NonCopyable.h"
+#ifndef PUBLISH_OUTPUTPARAMS_H_
+#define PUBLISH_OUTPUTPARAMS_H_
+
 #include "Params.h"
-#include <QMutex>
-#include <map>
+#include "DjbzDispatcher.h"
 
-class AbstractRelinker;
+#include <QDomDocument>
+
+
+class ImageInfo;
 
 namespace publish
 {
 
-class Settings : public RefCountable
+class OutputParams
 {
-    DECLARE_NON_COPYABLE(Settings)
 public:
-    Settings();
+    // Member-wise copying is OK.
 
-    virtual ~Settings();
+    OutputParams();
 
-    void setPageParams(PageId const& page_id, Params const& params);
+    OutputParams(const Params& params, const QString& djbzId,
+                 int djbzRevision, const DjbzParams& djbzParams);
 
-    void clearPageParams(PageId const& page_id);
+    OutputParams(QDomElement const& deps_el);
 
-    std::unique_ptr<Params> getPageParams(PageId const& page_id) const;
+    ~OutputParams();
 
-    void clear();
+    bool matches(OutputParams const& other) const;
 
-    void performRelinking(AbstractRelinker const& relinker);
-
+    QDomElement toXml(QDomDocument& doc, QString const& name) const;
 private:
-    typedef std::map<PageId, Params> PerPageParams;
-
-    mutable QMutex m_mutex;
-    PerPageParams m_perPageParams;
+    Params m_params;
+    QString m_djbzId;
+    int m_djbzRevision;
+    DjbzParams m_djbzParams;
 };
 
 } // namespace publish

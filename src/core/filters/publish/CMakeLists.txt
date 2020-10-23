@@ -9,8 +9,12 @@ SET(
         Task.cpp Task.h
         CacheDrivenTask.cpp CacheDrivenTask.h
         OptionsWidget.cpp OptionsWidget.h
+	Params.cpp Params.h
+	ImageInfo.cpp ImageInfo.h
         Settings.cpp Settings.h
-
+	DjbzDispatcher.cpp DjbzDispatcher.h
+	OutputParams.cpp OutputParams.h
+	DjVuPageGenerator.cpp DjVuPageGenerator.h
 )
 
 SOURCE_GROUP("Sources" FILES ${sources})

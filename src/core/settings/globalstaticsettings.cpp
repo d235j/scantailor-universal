@@ -55,3 +55,11 @@ bool GlobalStaticSettings::m_simulateSelectionModifierHintEnabled = true;
 bool GlobalStaticSettings::m_inversePageOrder = false;
 
 bool GlobalStaticSettings::m_DontUseNativeDialog = true;
+
+QString GlobalStaticSettings::m_djvu_pages_subfolder;
+int GlobalStaticSettings::m_djvu_pages_per_djbz;
+bool GlobalStaticSettings::m_djvu_djbz_match;
+bool GlobalStaticSettings::m_djvu_djbz_use_prototypes;
+bool GlobalStaticSettings::m_djvu_djbz_use_averaging;
+int GlobalStaticSettings::m_djvu_djbz_aggression;
+int GlobalStaticSettings::m_djvu_djbz_classifier;
