@@ -20,11 +20,12 @@
 #include "Utils.h"
 #include "RelinkablePath.h"
 #include "AbstractRelinker.h"
+#include "ExportSuggestions.h"
 
 namespace publish
 {
 
-Settings::Settings()
+Settings::Settings(): QObject(nullptr), m_bundledDocFilesize(0)
 {
 }
 
@@ -80,6 +81,51 @@ Settings::getPageParams(PageId const& page_id) const
     } else {
         return std::unique_ptr<Params>();
     }
+}
+
+void
+Settings::generateEncoderSettings(const QVector<PageId>& pages, const ExportSuggestions& export_suggestions, QStringList& settings)
+{
+    settings.clear();
+    settings << "(options\n  indirect 1\n) # options";
+    settings << "(input-files";
+    for (const PageId& p: pages) {
+        const Params& params = m_perPageParams[p];
+        const SourceImagesInfo si = params.sourceImagesInfo();
+        const QString fname = si.export_foregroundFilename().isEmpty() ?
+                    si.output_filename() :
+                    si.export_foregroundFilename();
+        settings << "  (file" <<
+                    "    " + fname <<
+                    "    (image";
+        const ExportSuggestion& es = export_suggestions[p];
+        if (!es.hasBWLayer && !es.hasColorLayer) {
+            settings << QString("       virtual %1 %2\n"
+                                "       dpi     %3\n").arg(es.width, es.height, es.dpi);
+        } else {
+            settings << QString("       dpi     %1\n"
+                                "       smooth  %2\n"
+                                "       clean   %3\n"
+                                "       erosion %4").arg(
+                            QString::number(params.outputDpi().horizontal()),
+                            params.smooth() ? "1" : "0",
+                            params.clean() ? "1" : "0",
+                            params.erosion() ? "1" : "0");
+        }
+        settings << "    ) #image"
+                 << "  ) #file";
+    }
+    settings << ") #input-files";
+}
+
+const DjbzDispatcher &Settings::djbzDispatcherConst() const
+{
+    return m_ptrDjbzDispatcher;
+}
+
+DjbzDispatcher &Settings::djbzDispatcher()
+{
+    return m_ptrDjbzDispatcher;
 }
 
 } // namespace publish

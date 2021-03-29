@@ -23,13 +23,17 @@
 #include "RelinkablePath.h"
 #include "AbstractRelinker.h"
 #include "../../Utils.h"
+#include "settings/ini_keys.h"
+#include "OutputFileNameGenerator.h"
+#include "PageSequence.h"
+#include "ExportSuggestions.h"
+
 #include <Qt>
 #include <QColor>
 #include <QMutexLocker>
 #include <tiff.h>
 #include <QResource>
-#include "settings/ini_keys.h"
-#include <QRegularExpression>
+#include <QFileInfo>
 
 namespace output
 {
@@ -39,6 +43,14 @@ Settings::Settings()
         m_defaultFillZoneProps(initialFillZoneProps()),
         m_compression(COMPRESSION_LZW)
 {
+    const QResource tiff_data(":/TiffCompressionMethods.tsv");
+    if (tiff_data.isCompressed()) {
+        m_TiffCompressionsAvail = QString::fromUtf8(
+                    qUncompress(tiff_data.data(), tiff_data.size())
+                    ).split('\n');
+    } else {
+        m_TiffCompressionsAvail = QString::fromUtf8((char const*)tiff_data.data(), tiff_data.size()).split('\n');
+    }
 }
 
 Settings::~Settings()
@@ -333,26 +345,19 @@ Settings::initialFillZoneProps()
     return props;
 }
 
-static QStringList _tiff_list;
-
 int
 Settings::getCompressionVal(const QString& compression)
 {
-    if (_tiff_list.isEmpty()) {
-        const QResource tiff_data(":/TiffCompressionMethods.tsv");
-        _tiff_list = QString::fromUtf8((char const*)tiff_data.data(), tiff_data.size()).split('\n');
+    for (const QString& compr: qAsConst(m_TiffCompressionsAvail)) {
+        if (compr.startsWith(compression + '\t')) {
+            const QStringList data = compr.split('\t');
+            Q_ASSERT(data.size() >= 3);
+            return data[1].toInt();
+        }
     }
 
-    QStringList data = _tiff_list.filter(QRegularExpression("^" + compression + "\t.*"));
-
-    if (data.empty()) {
-        throw std::runtime_error("Settings: unknown compression.");
-    }
-
-    Q_ASSERT(data.size() == 1);
-    data = data[0].split('\t');
-    Q_ASSERT(data.size() >= 3);
-    return data[1].toInt();
+    throw std::runtime_error("Settings: unknown compression.");
+    return 0;
 }
 
 int
@@ -383,6 +388,52 @@ Settings::setTiffCompression(QString const& compression)
     }
     // QSettings might be out of sync
     QSettings().setValue(_key_tiff_compr_method, m_compressionName);
+}
+
+bool
+Settings::checkOutputComplete(
+        OutputFileNameGenerator const& filename_gen,
+        PageSequence const& pages, PageId const* ignore) const
+{
+    QMutexLocker const locker(&m_mutex);
+
+    for (const PageInfo& page_info: pages) {
+        if (ignore && *ignore == page_info.id()) {
+            continue;
+        }
+
+        const QFileInfo info(filename_gen.filePathFor(page_info.id()));
+        if (!info.exists()) {
+            return false;
+        }
+
+        PerPageOutputParams::const_iterator it(m_perPageOutputParams.find(page_info.id()));
+        if (it == m_perPageOutputParams.cend() ||
+                !it->second.outputFileParams().matches(OutputFileParams(info))){
+            return false;
+        }
+    }
+
+    return true;
+}
+
+const ExportSuggestions&
+Settings::exportSuggestions() const
+{
+    return m_exportSuggestions;
+}
+
+//ExportSuggestion&
+//Settings::exportSuggestion(const PageId& page_id)
+//{
+//    Q_ASSERT(m_exportSuggestions.contains(page_id));
+//    return m_exportSuggestions[page_id];
+//}
+
+void
+Settings::setExportSuggestion(const PageId& page_id, const ExportSuggestion& es)
+{
+    m_exportSuggestions[page_id] = es;
 }
 
 } // namespace output

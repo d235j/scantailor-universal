@@ -56,10 +56,22 @@ bool GlobalStaticSettings::m_inversePageOrder = false;
 
 bool GlobalStaticSettings::m_DontUseNativeDialog = true;
 
+QString GlobalStaticSettings::m_djvu_bin_minidjvu;
+QString GlobalStaticSettings::m_djvu_bin_c44;
+QString GlobalStaticSettings::m_djvu_bin_djvuextract;
+QString GlobalStaticSettings::m_djvu_bin_djvumake;
+QString GlobalStaticSettings::m_djvu_bin_djvused;
+QString GlobalStaticSettings::m_djvu_bin_tesseract;
+QString GlobalStaticSettings::m_djvu_bin_djvm;
 QString GlobalStaticSettings::m_djvu_pages_subfolder;
+QString GlobalStaticSettings::m_djvu_layers_subfolder;
 int GlobalStaticSettings::m_djvu_pages_per_djbz;
-bool GlobalStaticSettings::m_djvu_djbz_match;
+bool GlobalStaticSettings::m_djvu_djbz_erosion;
 bool GlobalStaticSettings::m_djvu_djbz_use_prototypes;
 bool GlobalStaticSettings::m_djvu_djbz_use_averaging;
 int GlobalStaticSettings::m_djvu_djbz_aggression;
 int GlobalStaticSettings::m_djvu_djbz_classifier;
+QString GlobalStaticSettings::m_djvu_djbz_extension;
+
+uint GlobalStaticSettings::m_default_bsf = 1;
+FREE_IMAGE_FILTER GlobalStaticSettings::m_default_scale_filter = FREE_IMAGE_FILTER::FILTER_BICUBIC;

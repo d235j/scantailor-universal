@@ -323,6 +323,11 @@ Task::process(
 
     do { // Just to be able to break from it.
 
+        if (!m_ptrSettings->exportSuggestions().contains(m_pageId)) {
+            need_reprocess = true;
+            break;
+        }
+
         std::unique_ptr<OutputParams> stored_output_params(
             m_ptrSettings->getOutputParams(m_pageId)
         );
@@ -355,6 +360,12 @@ Task::process(
         }
 
         if (!out_file_info.exists()) {
+            need_reprocess = true;
+            break;
+        }
+
+        if (!m_ptrSettings->exportSuggestions().contains(m_pageId) ||
+                !m_ptrSettings->exportSuggestions()[m_pageId].isValid) {
             need_reprocess = true;
             break;
         }
@@ -512,6 +523,7 @@ Task::process(
             );
 
             m_ptrSettings->setOutputParams(m_pageId, out_params);
+            m_ptrSettings->setExportSuggestion(m_pageId, ExportSuggestion(out_img));
         }
 
         m_ptrThumbnailCache->recreateThumbnail(ImageId(out_file_path), out_img);
@@ -530,7 +542,7 @@ Task::process(
     }
 
     if (m_ptrNextTask) {
-        return m_ptrNextTask->process(status, FilterData(data, new_xform));
+        return m_ptrNextTask->process(status, FilterData(data, new_xform, &m_ptrSettings->exportSuggestions()));
     }
 
     if (CommandLine::get().isGui()) {

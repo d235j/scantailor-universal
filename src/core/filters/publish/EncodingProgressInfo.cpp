@@ -1,6 +1,6 @@
 /*
     Scan Tailor - Interactive post-processing tool for scanned pages.
-    Copyright (C) 2020 Alexander Trufanov <trufanovan@gmail.com>
+    Copyright (C) 2021 Alexander Trufanov <trufanovan@gmail.com>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,26 +16,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "ImageView.h"
-#include "ImageView.moc"
-#include "ImageTransformation.h"
-#include "ImagePresentation.h"
+#include "EncodingProgressInfo.h"
+//#include "EncodingProgressInfo.moc"
+namespace publish {
 
-namespace publish
-{
 
-ImageView::ImageView(
-    QImage const& image, QImage const& downscaled_image,
-    ImageTransformation const& xform)
-    :   ImageViewBase(
-            image, downscaled_image,
-            ImagePresentation(xform.transform(), xform.resultingPreCropArea())
-        )
-{
 }
-
-ImageView::~ImageView()
-{
-}
-
-} // namespace publish
+// register in metatype system, to pass throw signal-slots
+//Q_DECLARE_METATYPE(publish::EncodingProgressInfo)

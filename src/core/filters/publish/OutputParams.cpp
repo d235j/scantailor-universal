@@ -21,6 +21,9 @@
 #include "OutputParams.h"
 #include "XmlMarshaller.h"
 #include "XmlUnmarshaller.h"
+#include "DjbzDispatcher.h"
+#include "SourceImagesInfo.h"
+
 #include <QDomDocument>
 #include <QDomElement>
 
@@ -38,6 +41,7 @@ OutputParams::OutputParams(const Params& params, const QString& djbzId,
     m_djbzRevision(djbzRevision),
     m_djbzParams(djbzParams)
 {
+    m_params.resetOutputParams();
 }
 
 OutputParams::OutputParams(QDomElement const& el):
@@ -75,4 +79,4 @@ OutputParams::toXml(QDomDocument& doc, QString const& name) const
     return el;
 }
 
-} // namespace deskew
+} // namespace publish

@@ -24,10 +24,15 @@
 #include "FilterResult.h"
 #include "IntrusivePtr.h"
 #include "PageId.h"
+#include "OutputFileNameGenerator.h"
+#include "EncodingProgressInfo.h"
+#include <QObject>
 
 class TaskStatus;
 class FilterData;
 class QImage;
+class ExportSuggestions;
+class ThumbnailPixmapCache;
 
 namespace publish
 {
@@ -36,30 +41,51 @@ class Filter;
 class Settings;
 class DjbzDispatcher;
 
-class Task : public RefCountable
+class Task : public QObject, public RefCountable
 {
+    Q_OBJECT
     DECLARE_NON_COPYABLE(Task)
     public:
-        Task(QString const& filename,
-             const PageId &page_id,
+        Task(const PageId &page_id,
              IntrusivePtr<Filter> const& filter,
              IntrusivePtr<Settings> const& settings,
-             DjbzDispatcher& djbzDispatcher,
+             IntrusivePtr<ThumbnailPixmapCache> const& thumbnail_cache,
+             OutputFileNameGenerator const& out_file_name_gen,
              bool batch_processing);
 
     virtual ~Task();
 
     FilterResultPtr process(TaskStatus const& status, FilterData const& data);
-private:
-    class UiUpdater;
 
-    QString m_filename;
+Q_SIGNALS:
+    void displayDjVu(const PageId& page_id);
+    void setProgressPanelVisible(bool visible);
+    void displayProgressInfo(float progress, int process, int state);
+private:
+    bool needPageReprocess(const PageId &page_id) const;
+    bool needDjbzReprocess(const QString& djbz_id) const;
+    bool needReprocess() const;
+    void validateParams(const PageId& page_id);
+    void validateDjbzParams(const QString& djbz_id);
+    void validateParams();
+    void startExport(TaskStatus const& status, const QSet<PageId> &require_export);
+    bool checkReadyToBundle(const std::set<PageId> &pages) const;
+
+    class UiUpdater;
+    class EncoderThread;
+
     PageId m_pageId;
     IntrusivePtr<Filter> m_ptrFilter;
     IntrusivePtr<Settings> m_ptrSettings;
+    IntrusivePtr<ThumbnailPixmapCache> m_ptrThumbnailCache;
+    OutputFileNameGenerator const& m_refOutFileNameGen;
     DjbzDispatcher& m_refDjbzDispatcher;
     bool m_batchProcessing;
+    const ExportSuggestions* m_ptrExportSuggestions;
 
+    const QString m_out_path;
+    const QString m_djvu_path;
+    const QString m_export_path;
 };
 
 } // namespace publish

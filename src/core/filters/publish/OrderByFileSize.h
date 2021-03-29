@@ -16,42 +16,30 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef PUBLISHIMAGEINFO_H
-#define PUBLISHIMAGEINFO_H
+#ifndef PUBLISH_ORDER_BY_FILESIZE_PROVIDER_H_
+#define PUBLISH_ORDER_BY_FILESIZE_PROVIDER_H_
 
-#include <QImage>
+#include "Settings.h"
+#include "IntrusivePtr.h"
+#include "PageOrderProvider.h"
 
 namespace publish
 {
 
-struct ImageInfo {
+class OrderByFileSize : public PageOrderProvider
+{
+public:
+    OrderByFileSize(IntrusivePtr<Settings> const& settings);
 
-    enum ColorMode {
-        Unknown = 0,
-        BlackAndWhite = 1,
-        Grayscale = 3,
-        Color = 7
-    };
+	virtual bool precedes(
+		PageId const& lhs_page, bool lhs_incomplete,
+		PageId const& rhs_page, bool rhs_incomplete) const;
 
-    ImageInfo(): imageColorMode(Unknown) {}
-    ImageInfo(const QString& filename, const QImage& image);
-
-    static QString ColorModeToStr(const ColorMode clr) {
-        switch (clr) {
-        case BlackAndWhite: return "bw";
-        case Grayscale: return "grayscale";
-        case Color: return "color";
-        default: return "";
-        }
-    }
-
-    QString fileName;
-    QByteArray imageHash;
-    ColorMode imageColorMode;
-
-    bool operator !=(const ImageInfo &other) const;
+    virtual QString hint(PageId const& page) const;
+private:
+	IntrusivePtr<Settings> m_ptrSettings;
 };
 
-} //namespace publish
+} // namespace publish
 
-#endif // PUBLISHIMAGEINFO_H
+#endif //PUBLISH_ORDER_BY_FILESIZE_PROVIDER_H_

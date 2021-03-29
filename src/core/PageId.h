@@ -73,6 +73,9 @@ public:
     static QString subPageToString(SubPage sub_page);
 
     static SubPage subPageFromString(QString const& string, bool* ok = 0);
+
+    QByteArray toByteArray() const;
+    static int fromByteArray(const QByteArray& data, PageId& pageId);
 private:
     ImageId m_imageId;
     SubPage m_subPage;

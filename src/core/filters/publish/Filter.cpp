@@ -20,6 +20,7 @@
 #include "FilterUiInterface.h"
 #include "OptionsWidget.h"
 #include "Settings.h"
+#include "OutputParams.h"
 #include "Task.h"
 #include "CacheDrivenTask.h"
 #include "PageId.h"
@@ -38,25 +39,136 @@
 #include <QDomDocument>
 #include <QDomElement>
 #include <QDomNode>
+#include <QTabBar>
+#include <QMessageBox>
+#include <QMenu>
+#include <QFileDialog>
+#include <QProcess>
+#include <QDebug>
+
 #include <iostream>
 #include "CommandLine.h"
+#include "StatusBarProvider.h"
+#include "OrderByFileSize.h"
+
+#include "StageSequence.h"
+
+#include <libdjvu/ddjvuapi.h>
+
+// required by resource system for static libs
+// must be declared in default namespace
+inline void initStaticLibResources() { Q_INIT_RESOURCE(qdjvuwidget); }
 
 namespace publish
 {
 
-Filter::Filter(IntrusivePtr<ProjectPages> const& pages,
+Filter::Filter(StageSequence* stages, IntrusivePtr<ProjectPages> const& pages,
                PageSelectionAccessor const& page_selection_accessor)
-    :   m_ptrPages(pages), m_ptrSettings(new Settings), m_ptrDjbzDispatcher(new DjbzDispatcher)
+    : m_ptrStages(stages),
+      m_outputFileNameGenerator(nullptr),
+      m_ptrPages(pages),
+      m_ptrSettings(new Settings),
+      m_DjVuContext("scan_tailor_universal"),
+      m_selectedPageOrder(0), m_suppressDjVuDisplay(false)
 {
+    initStaticLibResources();
+
+    connect(m_ptrSettings.get(), &Settings::bundledDocReady, this, &Filter::bundledDocReady);
+
     if (CommandLine::get().isGui()) {
+        setupImageViewer();
         m_ptrOptionsWidget.reset(
-            new OptionsWidget(m_ptrSettings, page_selection_accessor)
+            new OptionsWidget(this, page_selection_accessor)
         );
     }
+
+
+    typedef PageOrderOption::ProviderPtr ProviderPtr;
+    ProviderPtr const default_order;
+    ProviderPtr const order_by_filesize(new OrderByFileSize(m_ptrSettings));
+    m_pageOrderOptions.push_back(PageOrderOption(tr("Natural order"), default_order));
+    m_pageOrderOptions.push_back(PageOrderOption(tr("Order by file size"), order_by_filesize,
+                                                 tr("Orders the pages by the DjVu page file size")));
 }
 
 Filter::~Filter()
 {
+}
+
+void Filter::setupImageViewer()
+{
+    QWidget* wgt = new QWidget();
+    m_ptrImageViewer.reset(wgt);
+    QVBoxLayout* lt = new QVBoxLayout(wgt);
+    lt->setSpacing(0);
+
+    QTabBar* tab = new QTabBar();
+    tab->setObjectName("tab");
+    tab->addTab(tr("Main"));
+    tab->addTab(tr("Foreground"));
+    tab->addTab(tr("Background"));
+    tab->addTab(tr("B&W Mask"));
+    tab->addTab(tr("Text"));
+
+    lt->addWidget(tab, 0, Qt::AlignTop);
+    m_ptrDjVuWidget.reset( new QDjVuWidget() );
+    lt->addWidget(m_ptrDjVuWidget.get(), 100);
+
+    connect(tab, &QTabBar::currentChanged, this, &Filter::tabChanged );
+}
+
+void
+Filter::suppressDjVuDisplay(const PageId& page_id, bool val)
+{
+    bool update_display = !val && m_suppressDjVuDisplay;
+    m_suppressDjVuDisplay = val;
+
+    if (update_display) {
+        updateDjVuDocument(page_id);
+    }
+}
+
+void
+Filter::updateDjVuDocument(const PageId& page_id)
+{
+
+    std::unique_ptr<Params> params = m_ptrSettings->getPageParams(page_id);
+    const QString djvu_filename = params->djvuFilename();
+
+    StatusBarProvider::setFileSize(params->djvuSize());
+
+    if (!m_suppressDjVuDisplay) {
+        if (QFileInfo::exists(djvu_filename)) {
+
+            ddjvu_cache_clear(m_DjVuContext);
+            QDjVuDocument* doc = new QDjVuDocument(true);
+            doc->setFileName(&m_DjVuContext, djvu_filename, false);
+
+            if (!doc->isValid()) {
+                delete doc;
+                QMessageBox::critical(qApp->activeWindow(), tr("Cannot open file '%1'.").arg(djvu_filename), tr("Opening DjVu file"));
+            } else {
+                // technically takes doc ownership as it was created with autoDel==true
+                connect(doc, &QDjVuDocument::error, [](QString err, QString fname, int line_no) {
+                    qDebug() << err << fname << line_no;
+                });
+                m_ptrDjVuWidget->setDocument(doc);
+                m_ptrDjVuWidget->setAlternativeImage(params->sourceImagesInfo().output_filename());
+                QColor clr(Qt::red);
+                clr.setAlpha(60);
+                m_ptrDjVuWidget->addHighlight(0, 1, 1, 1000, 1000, clr);
+                m_ptrImageViewer->show();
+
+                QTabBar* tab = m_ptrImageViewer->findChild<QTabBar*>("tab");
+                assert(tab);
+                emit tab->currentChanged(tab->currentIndex());
+            }
+        } else {
+            m_ptrImageViewer->hide();
+        }
+    }
+
+    emit m_ptrOptionsWidget->invalidateThumbnail(page_id);
 }
 
 QString
@@ -70,7 +182,26 @@ Filter::getName() const
 PageView
 Filter::getView() const
 {
-    return IMAGE_VIEW;
+    return PAGE_VIEW;
+}
+
+int
+Filter::selectedPageOrder() const
+{
+    return m_selectedPageOrder;
+}
+
+void
+Filter::selectPageOrder(int option)
+{
+    assert((unsigned)option < m_pageOrderOptions.size());
+    m_selectedPageOrder = option;
+}
+
+std::vector<PageOrderOption>
+Filter::pageOrderOptions() const
+{
+    return m_pageOrderOptions;
 }
 
 void
@@ -82,9 +213,8 @@ Filter::performRelinking(AbstractRelinker const& relinker)
 void
 Filter::preUpdateUI(FilterUiInterface* ui, PageId const& page_id)
 {
-    QString filename;
     if (m_ptrOptionsWidget.get()) {
-        m_ptrOptionsWidget->preUpdateUI(filename);
+        m_ptrOptionsWidget->preUpdateUI(page_id);
         ui->setOptionsWidget(m_ptrOptionsWidget.get(), ui->KEEP_OWNERSHIP);
     }
 }
@@ -94,6 +224,11 @@ Filter::saveSettings(
     ProjectWriter const& writer, QDomDocument& doc) const
 {
     QDomElement filter_el(doc.createElement("publishing"));
+
+    filter_el.setAttribute("bundled_name", m_ptrSettings->bundledDocFilename());
+    filter_el.setAttribute("bundled_size", m_ptrSettings->bundledDocFilesize());
+    filter_el.setAttribute("bundled_modified", m_ptrSettings->bundledDocModified().toString());
+
     writer.enumPages(
         boost::lambda::bind(
             &Filter::writePageSettings,
@@ -101,7 +236,16 @@ Filter::saveSettings(
         )
     );
 
-    filter_el.appendChild(m_ptrDjbzDispatcher->toXml(doc, "djbz_dispatcher"));
+    filter_el.appendChild(m_ptrSettings->djbzDispatcherConst().toXml(doc, "djbz_dispatcher"));
+    const QMap<QString, QString>& metadata = m_ptrSettings->metadataRef();
+    if (!metadata.isEmpty()) {
+        QDomElement metadata_el(doc.createElement("metadata"));
+        for (QMap<QString, QString>::const_iterator it = metadata.cbegin();
+             it != metadata.cend(); it++) {
+            metadata_el.setAttribute(it.key(), *it);
+        }
+        filter_el.appendChild(metadata_el);
+    }
 
     return filter_el;
 }
@@ -111,9 +255,45 @@ Filter::loadSettings(ProjectReader const& reader, QDomElement const& filters_el)
 {
     m_ptrSettings->clear();
 
-    QDomElement filter_el(filters_el.namedItem("publishing").toElement());
-    m_ptrDjbzDispatcher.reset(new DjbzDispatcher(
-                                  filters_el.namedItem("djbz_dispatcher").toElement()));
+    const QDomElement filter_el(filters_el.namedItem("publishing").toElement());
+
+    const QString bundled_name = filter_el.attribute("bundled_name", "");
+    m_ptrSettings->setBundledDocFilename(bundled_name);
+    if (!bundled_name.isEmpty()) {
+        bool reseted = false;
+        if (filter_el.hasAttribute("bundled_size")) {
+            uint size = filter_el.attribute("bundled_size").toUInt();
+            if (m_ptrSettings->bundledDocFilesize() != size) {
+                m_ptrSettings->resetBundledDoc();
+                reseted = true;
+            }
+        }
+
+        if (!reseted && filter_el.hasAttribute("bundled_modified")) {
+            QDateTime modif = QDateTime::fromString(filter_el.attribute("bundled_modified"));
+            if (m_ptrSettings->bundledDocModified() != modif) {
+                m_ptrSettings->resetBundledDoc();
+            }
+        }
+    }
+
+
+
+    m_ptrSettings->djbzDispatcher() = DjbzDispatcher(filter_el.namedItem("djbz_dispatcher").toElement());
+
+    const QDomNodeList metadata_els = filter_el.elementsByTagName("metadata");
+    if (!metadata_els.isEmpty()) {
+        assert(metadata_els.size() == 1);
+        const QDomElement metadata_el = metadata_els.at(0).toElement();
+        assert(!metadata_el.isNull());
+        const QDomNamedNodeMap vals = metadata_el.attributes();
+        QMap<QString, QString> metadata;
+        for ( int i = 0; i < vals.count(); i++) {
+            const QDomNode dn = vals.item(i);
+            metadata[dn.nodeName()] = dn.nodeValue();
+        }
+        m_ptrSettings->setMetadata(metadata);
+    }
 
     QString const page_tag_name("page");
     QDomNode node(filter_el.firstChild());
@@ -144,6 +324,7 @@ Filter::loadSettings(ProjectReader const& reader, QDomElement const& filters_el)
 
         Params const params(params_el);
         m_ptrSettings->setPageParams(page_id, params);
+        m_ptrSettings->djbzDispatcher().setToDjbz(page_id, params.djbzId(), true);
     }
 }
 
@@ -158,25 +339,70 @@ Filter::invalidateSetting(PageId const& page_id)
     }
 }
 
+void
+Filter::initializeDjbzDispatcher()
+{
+    const PageSequence pages = m_ptrPages->toPageSequence(PageView::PAGE_VIEW);
+
+    DjbzDispatcher & djbzs = m_ptrSettings->djbzDispatcher();
+
+    if (!djbzs.isInitialised()) {
+        // dispatcher is empty
+        djbzs.resetAllDicts(pages);
+        for (const PageInfo& p: pages) {
+            PageId const& page_id = p.id();
+            std::unique_ptr<Params> params_ptr(m_ptrSettings->getPageParams(page_id));
+            Params params = params_ptr ? Params(*params_ptr.get()) : Params();
+            const QString djbz_id = djbzs.findDjbzForPage(page_id);
+            const DjbzDict dict = djbzs.djbzDict(djbz_id);
+            params.setDjbzId(djbz_id);
+            m_ptrSettings->setPageParams(page_id, params);
+        }
+    } else {
+        // dispatcher not empty, check if all pages are assigned to dictionaries
+        for (const PageInfo& p: pages) {
+            PageId const& page_id = p.id();
+            std::unique_ptr<Params> params_ptr(m_ptrSettings->getPageParams(page_id));
+            if (!params_ptr || params_ptr->djbzId().isEmpty()) {
+                Params params = params_ptr ? Params(*params_ptr.get()) : Params();
+                const QString djbz_id = djbzs.addNewPage(page_id);
+                const DjbzDict dict = djbzs.djbzDict(djbz_id);
+                params.setDjbzId(djbz_id);
+                m_ptrSettings->setPageParams(page_id, params);
+            }
+
+        }
+    }
+}
+
 IntrusivePtr<Task>
 Filter::createTask(
     PageId const& page_id,
+    IntrusivePtr<ThumbnailPixmapCache> const& thumbnail_cache,
+    OutputFileNameGenerator const& out_file_name_gen,
     bool const batch_processing)
 {
-    QString filename;
-    return IntrusivePtr<Task>(
-               new Task(
-                   filename, page_id, IntrusivePtr<Filter>(this),
-                   m_ptrSettings, *m_ptrDjbzDispatcher, batch_processing
-               )
-           );
+    IntrusivePtr<Task> task(
+                   new Task(
+                       page_id, IntrusivePtr<Filter>(this),
+                       m_ptrSettings, thumbnail_cache, out_file_name_gen, batch_processing
+                   )
+               );
+    // must be done via slots as both objects are in different threads
+    connect(task.get(), &Task::displayDjVu, this, &Filter::updateDjVuDocument);
+    connect(task.get(), &Task::setProgressPanelVisible, this, &Filter::setProgressPanelVisible);
+    connect(task.get(), &Task::displayProgressInfo, this, &Filter::displayProgressInfo);
+
+    m_ptrDjVuWidget->setDocument(nullptr);
+    m_ptrDjVuWidget->update();
+    return task;
 }
 
 IntrusivePtr<CacheDrivenTask>
-Filter::createCacheDrivenTask()
+Filter::createCacheDrivenTask(const OutputFileNameGenerator &out_file_name_gen)
 {
     return IntrusivePtr<CacheDrivenTask>(
-               new CacheDrivenTask(m_ptrSettings)
+               new CacheDrivenTask(m_ptrSettings, out_file_name_gen)
            );
 }
 
@@ -197,4 +423,45 @@ Filter::writePageSettings(
     filter_el.appendChild(page_el);
 }
 
+IntrusivePtr<CompositeCacheDrivenTask>
+Filter::createCompositeCacheDrivenTask()
+{
+    if (m_outputFileNameGenerator) {
+        return m_ptrStages->createCompositeCacheDrivenTask(*m_outputFileNameGenerator, m_ptrStages->publishFilterIdx());
+    } else {
+        return IntrusivePtr<CompositeCacheDrivenTask>();
+    }
+}
+
+void
+Filter::displayDbjzManagerDlg()
+{
+    if (m_ptrOptionsWidget) {
+        m_ptrOptionsWidget->on_lblDjbzId_linkActivated(QString());
+    }
+}
+
+QVector<PageInfo>
+Filter::filterBatchPages(const QVector<PageInfo>& pages) const
+{
+    QVector<PageInfo> res;
+    QSet<QString> known_djbz;
+    for (const PageInfo& page: pages) {
+        std::unique_ptr<Params> params = m_ptrSettings->getPageParams(page.id());
+        if (params) {
+            QString id = params->djbzId();
+            if (!known_djbz.contains(id) ||
+                    m_ptrSettings->djbzDispatcherConst().isDummyDjbzId(id)) {
+                res += page;
+                known_djbz += id;
+            }
+        } else {
+            res += page;
+        }
+    }
+    return res;
+}
+
+
 } // namespace publish
+

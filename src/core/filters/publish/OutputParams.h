@@ -22,7 +22,6 @@
 #define PUBLISH_OUTPUTPARAMS_H_
 
 #include "Params.h"
-#include "DjbzDispatcher.h"
 
 #include <QDomDocument>
 
@@ -31,6 +30,9 @@ class ImageInfo;
 
 namespace publish
 {
+
+class DjbzParams;
+struct SourceImagesInfo;
 
 class OutputParams
 {
@@ -49,11 +51,14 @@ public:
     bool matches(OutputParams const& other) const;
 
     QDomElement toXml(QDomDocument& doc, QString const& name) const;
+
+    const Params& params() const {return m_params; };
 private:
     Params m_params;
     QString m_djbzId;
     int m_djbzRevision;
     DjbzParams m_djbzParams;
+    SourceImagesInfo m_sourceImagesInfo;
 };
 
 } // namespace publish

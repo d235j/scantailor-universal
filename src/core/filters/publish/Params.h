@@ -22,12 +22,14 @@
 #include "Dpi.h"
 #include "RegenParams.h"
 #include "PageId.h"
-#include "ImageInfo.h"
+#include "SourceImagesInfo.h"
+#include "FreeImageFilters.h"
+#include "settings/globalstaticsettings.h"
+
 #include <QVariantMap>
 #include <QFileInfo>
 #include <QDir>
 #include <QImage>
-#include <settings/globalstaticsettings.h>
 
 class QDomDocument;
 class QDomElement;
@@ -37,38 +39,33 @@ namespace publish
 
 class OutputParams;
 
+typedef QVector<QPair<QRect, QColor> > ColorRects;
+
 class Params: public RegenParams
 {
 public:
     Params();
     Params(QDomElement const& el);
-    bool isNull() const { return m_inputImageInfo.fileName.isEmpty() ||
-                m_inputImageInfo.imageColorMode == ImageInfo::ColorMode::Unknown; }
+//    bool isNull() const { return m_inputImageInfo.fileName.isEmpty() ||
+//                m_inputImageInfo.imageColorMode == DjVuPageInfo::ColorMode::Unknown; }
 
     Dpi const& outputDpi() const { return m_dpi; }
     void setOutputDpi(Dpi const& dpi) { m_dpi = dpi; }
 
-    QString const imageFilename() const { return m_inputImageInfo.fileName; }
-    void setImageFilename(QString const& val) { m_inputImageInfo.fileName = val; }
+    void setSourceImagesInfo(const SourceImagesInfo& info) { m_sourceImagesInfo = info; }
+    const SourceImagesInfo& sourceImagesInfo() const { return m_sourceImagesInfo; }
 
-    QString const djvuFilename() const {
-        QFileInfo info(m_inputImageInfo.fileName);
-        return info.path() + QDir::separator() + GlobalStaticSettings::m_djvu_pages_subfolder + QDir::separator() + info.completeBaseName() + ".djv";
-    }
+    void setDjvuFilename(const QString& fname) { m_djvuFilename = fname; }
+    QString const djvuFilename() const { return m_djvuFilename; }
 
-    void setInputImageHash(const QByteArray & val) { m_inputImageInfo.imageHash = val; }
-    const QByteArray & inputImageHash() const { return m_inputImageInfo.imageHash; }
+    void setDjVuSize(uint size) { m_djvuSize = size; }
+    uint djvuSize() const { return m_djvuSize; }
 
-    void setInputImageColorMode(ImageInfo::ColorMode val) { m_inputImageInfo.imageColorMode = val; }
-    ImageInfo::ColorMode inputImageColorMode() const { return m_inputImageInfo.imageColorMode; }
+    // sometimes changes in DjVu doc doesn't affect its size (for ex. `FGbz=#color` set)
+    void setDjVuLastChanged(const QDateTime& dt) { m_djvuChanged = dt; }
+    QDateTime djvuLastChanged() const { return m_djvuChanged; }
 
-    void setImageInfo(const ImageInfo& info) { m_inputImageInfo = info; }
-    ImageInfo imageInfo() const { return m_inputImageInfo; }
-
-    void setDjVuSize(int size) { m_djvuSize = size; }
-    int djvuSize() const { return m_djvuSize; }
-
-    void setDjbzId(QString const& DjbzId) { m_djbzId = DjbzId; }
+    void setDjbzId(QString const& djbzId) { m_djbzId = djbzId; }
     QString djbzId() const { return m_djbzId; }
 
     void setDjbzRevision(int val) { m_djbzRevision = val; }
@@ -83,6 +80,16 @@ public:
     void setSmooth(bool smooth) { m_smooth = smooth; }
     bool smooth() const { return m_smooth; }
 
+    int bsf() const { return m_bsf; }
+    void setBsf(int val) { m_bsf = val; }
+
+    FREE_IMAGE_FILTER scaleMethod() const { return m_scale_method; }
+    void setScaleMethod(FREE_IMAGE_FILTER val) { m_scale_method = val; }
+
+    QString fgbzOptions() const { return m_FGbz_options; }
+    void setFGbzOptions(const QString& val) { m_FGbz_options = val.trimmed(); }
+
+    void resetOutputParams() { m_ptrOutputParams.reset(); }
     bool hasOutputParams() const { return m_ptrOutputParams != nullptr; }
     const OutputParams& outputParams() const { return *m_ptrOutputParams; }
 
@@ -91,19 +98,43 @@ public:
     ~Params(){}
 
     bool operator !=(const Params &other) const;
-
+    bool matchJb2Part(const Params &other) const;
+    bool matchBg44Part(const Params &other) const;
+    bool matchAssemblePart(const Params &other) const;
+    bool matchPostprocessPart(const Params &other) const;
     void rememberOutputParams(const DjbzParams &djbz_params);
 
+    const ColorRects& colorRects() const { return m_colorRects; }
+    ColorRects& colorRectsRef() { return m_colorRects; }
+    void addColorRect(const QRect& rect, const QColor& color) { m_colorRects.append(QPair<QRect, QColor>(rect, color)); }
+    void clearColorRects() { m_colorRects.clear(); }
+    QString colorRectsAsTxt() const;
+    void colorRectsFromTxt(const QString& txt);
+    bool containsColorRectsIn(const QRect& rect);
+    void removeColorRectsIn(const QRect& rect);
+
+    QString title() const { return m_title; }
+    void setTitle(const QString& title) { m_title = title; }
+    uint rotation() const { return m_rotation; }
+    void setRotation(uint val) { m_rotation = val; }
 private:
     Dpi m_dpi;
-    ImageInfo m_inputImageInfo;
-    int m_djvuSize;
+    SourceImagesInfo m_sourceImagesInfo;
+    QString m_djvuFilename;
+    uint m_djvuSize;
+    QDateTime m_djvuChanged;
     QString m_djbzId;
     int m_djbzRevision;
     bool m_clean;
     bool m_erosion;
     bool m_smooth;
-    std::unique_ptr<OutputParams> m_ptrOutputParams;
+    int m_bsf;
+    FREE_IMAGE_FILTER m_scale_method;
+    QString m_FGbz_options;
+    std::shared_ptr<OutputParams> m_ptrOutputParams;
+    ColorRects m_colorRects;
+    QString m_title;
+    uint m_rotation;
 };
 
 } // namespace publish

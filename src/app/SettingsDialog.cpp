@@ -26,7 +26,10 @@
 #include <QDebug>
 #include <QResource>
 #include <QColorDialog>
+#include <QFileDialog>
 #include <QMessageBox>
+#include <QProcess>
+#include <QStandardPaths>
 #include "MainWindow.h"
 #include "filters/output/DespeckleLevel.h"
 #include "filters/output/Params.h"
@@ -251,7 +254,8 @@ SettingsDialog::populateTreeWidget(QTreeWidget* treeWidget)
                                            <<               tr("Foreground layer")
                                            <<        tr("Fill zones")
                                            <<        tr("Dewarping")
-                                           <<        tr("Despeckling");
+                                           <<        tr("Despeckling")
+                                           << tr("Publish");
     const QResource tree_metadata(":/SettingsTreeData.tsv");
     QStringList tree_data = QString::fromUtf8((char const*)tree_metadata.data(), tree_metadata.size()).split('\n');
 
@@ -583,6 +587,8 @@ void SettingsDialog::on_stackedWidget_currentChanged(int /*arg1*/)
     } else if (currentPage == ui.pageDewarping) {
         ui.cbTryVertHalfCorrection->setChecked(m_settings.value(_key_dewarp_auto_vert_half_correction, _key_dewarp_auto_vert_half_correction_def).toBool());
         ui.cbTryDeskewAfterDewarp->setChecked(m_settings.value(_key_dewarp_auto_deskew_after_dewarp, _key_dewarp_auto_deskew_after_dewarp_def).toBool());
+    } else if (currentPage == ui.pagePublish) {
+        ui.edMinidjvu->setText(m_settings.value(_key_djvu_bin_minidjvu, _key_djvu_bin_minidjvu_def).toString());
     }
 
 }
@@ -1083,4 +1089,50 @@ void SettingsDialog::on_btnColorDeskewReset_released()
     m_settings.setValue(_key_deskew_controls_color, _key_deskew_controls_color_def);
     QString s("QToolButton {background: %1};");
     ui.btnColorDeskew->setStyleSheet(s.arg(_key_deskew_controls_color_def));
+}
+
+void SettingsDialog::on_btnMinidjvuChoose_clicked()
+{
+    QString path = qApp->applicationDirPath();
+#ifdef _WIN32
+    QString filter = "minidjvu-mod (minidjvu-mod.exe)";
+#else
+    QString filter = "minidjvu-mod (minidjvu-mod)";
+#endif
+
+    QString minidjvu = QFileDialog::getOpenFileName(this, tr("Choose minidjvu-mod executable"), path, filter);
+    if (!minidjvu.isEmpty()) {
+        ui.edMinidjvu->setText(minidjvu);
+    }
+}
+
+void SettingsDialog::on_edMinidjvu_textChanged(const QString &txt)
+{
+    QProcess proc(this);
+    proc.start(txt, QStringList());
+    proc.waitForFinished(2000);
+
+    const QString output(proc.readAllStandardOutput());
+
+    // Let's grep the minidjvu version
+    QRegularExpression re(".*minidjvu-mod ([0-9.a-zA-Z]+) - .*");
+    QRegularExpressionMatch match = re.match(output);
+    QString version(tr("Version: "));
+
+    if (match.hasMatch() && match.lastCapturedIndex() > 0) {
+        version += match.captured(1);
+        m_settings.setValue(_key_djvu_bin_minidjvu, txt);
+    } else {
+        //"Предупреждение: версии программы и библиотеки не совпадают:
+        //program version 0.9, library version 0.9m01."
+        re.setPattern(".*program version ([0-9.a-zA-Z]+, library version [0-9.a-zA-Z]+)\\..*");
+        match = re.match(output);
+        if (match.hasMatch() && match.lastCapturedIndex() > 0) {
+            version += match.captured(1);
+            m_settings.setValue(_key_djvu_bin_minidjvu, txt);
+        } else {
+            version = tr("minidjvu-mod executable can't be found !");
+        }
+    }
+    ui.lblMinidjvuVersion->setText(version);
 }

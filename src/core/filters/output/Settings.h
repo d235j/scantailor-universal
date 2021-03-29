@@ -38,8 +38,11 @@
 //Picture_Shape
 #include "Params.h"
 //end of modified by monday2000
+#include "ExportSuggestions.h"
 
 class AbstractRelinker;
+class OutputFileNameGenerator;
+class PageSequence;
 
 namespace output
 {
@@ -93,6 +96,9 @@ public:
     const QString getTiffCompressionName() const;
     void setTiffCompression(QString const& compression);
 
+    bool checkOutputComplete(OutputFileNameGenerator const& filename_gen,
+                             PageSequence const& pages, PageId const* ignore) const;
+
     /**
      * For now, default zone properties are not persistent.
      * They may become persistent later though.
@@ -104,6 +110,10 @@ public:
     void setDefaultPictureZoneProperties(PropertySet const& props);
 
     void setDefaultFillZoneProperties(PropertySet const& props);
+
+    const ExportSuggestions& exportSuggestions() const;
+//    ExportSuggestion& exportSuggestion(const PageId& page_id);
+    void setExportSuggestion(const PageId& page_id, const ExportSuggestion& es);
 private:
     typedef std::map<PageId, Params> PerPageParams;
     typedef std::map<PageId, OutputParams> PerPageOutputParams;
@@ -122,6 +132,8 @@ private:
     PropertySet m_defaultFillZoneProps;
     int m_compression;
     QString m_compressionName;
+    QStringList m_TiffCompressionsAvail;
+    ExportSuggestions m_exportSuggestions;
 };
 
 } // namespace output

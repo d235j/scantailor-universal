@@ -108,13 +108,25 @@ public:
 
         m_DontUseNativeDialog = settings.value(_key_dont_use_native_dialog, _key_dont_use_native_dialog_def).toBool();
 
-        m_djvu_pages_subfolder= settings.value(_key_djvu_pages_subfolder, _key_djvu_pages_subfolder_def).toString();
-        m_djvu_pages_per_djbz = settings.value(_key_djvu_pages_per_djbz, _key_djvu_pages_per_djbz_def).toInt();
-        m_djvu_djbz_match = settings.value(_key_djvu_djbz_match, _key_djvu_djbz_match_def).toBool();
+        m_djvu_bin_c44 = settings.value(_key_djvu_bin_c44, _key_djvu_bin_c44_def).toString();
+        m_djvu_bin_minidjvu = settings.value(_key_djvu_bin_minidjvu, _key_djvu_bin_minidjvu_def).toString();
+        m_djvu_bin_djvuextract = settings.value(_key_djvu_bin_djvuextract, _key_djvu_bin_djvuextract_def).toString();
+        m_djvu_bin_djvumake = settings.value(_key_djvu_bin_djvumake, _key_djvu_bin_djvumake_def).toString();
+        m_djvu_bin_djvused = settings.value(_key_djvu_bin_djvused, _key_djvu_bin_djvused_def).toString();
+        m_djvu_bin_tesseract = settings.value(_key_djvu_bin_tesseract, _key_djvu_bin_tesseract_def).toString();
+        m_djvu_bin_djvm = settings.value(_key_djvu_bin_djvm, _key_djvu_bin_djvm_def).toString();
+        m_djvu_pages_subfolder = settings.value(_key_djvu_pages_subfolder, _key_djvu_pages_subfolder_def).toString();
+        m_djvu_layers_subfolder = settings.value(_key_djvu_layers_subfolder, _key_djvu_layers_subfolder_def).toString();
+        m_djvu_pages_per_djbz  = settings.value(_key_djvu_pages_per_djbz, _key_djvu_pages_per_djbz_def).toInt();
+        m_djvu_djbz_erosion    = settings.value(_key_djvu_djbz_erosion, _key_djvu_djbz_erosion_def).toBool();
         m_djvu_djbz_use_prototypes = settings.value(_key_djvu_djbz_use_prototypes, _key_djvu_djbz_use_prototypes_def).toBool();
         m_djvu_djbz_use_averaging = settings.value(_key_djvu_djbz_use_averaging, _key_djvu_djbz_use_averaging_def).toBool();
         m_djvu_djbz_aggression = settings.value(_key_djvu_djbz_aggression, _key_djvu_djbz_aggression_def).toInt();
         m_djvu_djbz_classifier = settings.value(_key_djvu_djbz_classifier, _key_djvu_djbz_classifier_def).toInt();
+        m_djvu_djbz_extension  = settings.value(_key_djvu_djbz_extension, _key_djvu_djbz_extension_def).toString();
+
+        m_default_bsf = settings.value(_key_scale_bsf, _key_scale_bsf_def).toUInt();
+        m_default_scale_filter = (FREE_IMAGE_FILTER) settings.value(_key_scale_filter, _key_scale_filter_def).toUInt();
     }
 
     static void updateHotkeys()
@@ -264,13 +276,26 @@ public:
 
     static bool m_DontUseNativeDialog;
 
+    static QString m_djvu_bin_minidjvu;
+    static QString m_djvu_bin_c44;
+    static QString m_djvu_bin_djvuextract;
+    static QString m_djvu_bin_djvumake;
+    static QString m_djvu_bin_djvused;
+    static QString m_djvu_bin_tesseract;
+    static QString m_djvu_bin_djvm;
     static QString m_djvu_pages_subfolder;
+    static QString m_djvu_layers_subfolder;
     static int m_djvu_pages_per_djbz;
-    static bool m_djvu_djbz_match;
+    static bool m_djvu_djbz_erosion;
     static bool m_djvu_djbz_use_prototypes;
     static bool m_djvu_djbz_use_averaging;
     static int m_djvu_djbz_aggression;
     static int m_djvu_djbz_classifier;
+    static QString m_djvu_djbz_extension;
+
+    static uint m_default_bsf;
+    static FREE_IMAGE_FILTER m_default_scale_filter;
+
 };
 
 #endif // GLOBALSTATICSETTINGS_H

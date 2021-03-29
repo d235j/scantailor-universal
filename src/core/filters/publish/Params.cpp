@@ -22,10 +22,14 @@
 #include "CommandLine.h"
 #include "OutputParams.h"
 #include "DjbzDispatcher.h"
+#include "settings/globalstaticsettings.h"
+
 #include <QDomDocument>
 #include <QDomElement>
 #include <QString>
 #include <QCryptographicHash>
+#include <QRegularExpression>
+
 
 namespace publish
 {
@@ -34,24 +38,39 @@ Params::Params()
 :  RegenParams(),
   m_dpi(CommandLine::get().getDefaultOutputDpi()),
   m_djvuSize(0), m_djbzRevision(0),
-  m_clean(false), m_erosion(false), m_smooth(true)
+  m_clean(false), m_erosion(false), m_smooth(true),
+  m_bsf(GlobalStaticSettings::m_default_bsf),
+  m_scale_method(GlobalStaticSettings::m_default_scale_filter),
+  m_FGbz_options("#black"),
+  m_rotation(0)
 {    
 }
 
 Params::Params(QDomElement const& el)
 :	RegenParams(),
-    m_dpi(XmlUnmarshaller::dpi(el.namedItem("dpi").toElement()))
-
+    m_dpi(XmlUnmarshaller::dpi(el.namedItem("dpi").toElement())),
+    m_sourceImagesInfo(el.namedItem("source_images_info").toElement())
 {
-    m_inputImageInfo.fileName = XmlUnmarshaller::string(el.namedItem("input_filename").toElement());
-    m_inputImageInfo.imageHash = QByteArray::fromHex(el.attribute("input_image_hash").toLocal8Bit());
-    m_inputImageInfo.imageColorMode = (ImageInfo::ColorMode) el.attribute("input_image_color_mode").toUInt();
-    m_djvuSize = el.attribute("djvu_filesize").toInt();
-    m_djbzId = el.attribute("djbz_id");
+    m_djvuFilename = el.attribute("djvu_filename");
+    m_djvuSize     = el.attribute("djvu_filesize").toUInt();
+    m_djvuChanged = QDateTime::fromString(el.attribute("djvu_modified"));
+    m_djbzId       = el.attribute("djbz_id");
     m_djbzRevision = el.attribute("djbz_rev").toInt();
-    m_clean = el.attribute("clean").toInt();
-    m_erosion = el.attribute("erosion").toInt();
-    m_smooth = el.attribute("smooth").toInt();
+    m_clean        = el.attribute("clean").toInt();
+    m_erosion      = el.attribute("erosion").toInt();
+    m_smooth       = el.attribute("smooth").toInt();
+    m_bsf          = el.attribute("bsf", QString::number(GlobalStaticSettings::m_default_bsf)).toUInt();
+    m_scale_method = str2scale_filter(el.attribute("method", scale_filter2str(GlobalStaticSettings::m_default_scale_filter)));
+    m_FGbz_options = el.attribute("fgbz", "#black").trimmed();
+    if (el.hasAttribute("fgbz_rects")) {
+        colorRectsFromTxt(el.attribute("fgbz_rects", ""));
+    }
+
+    m_title = el.attribute("title", "");
+    m_rotation = el.attribute("rotation", "0").toUInt();
+
+
+
     QDomNode item = el.namedItem("processed_with");
     if (!item.isNull() && item.isElement()) {
         m_ptrOutputParams.reset(new OutputParams(item.toElement()));
@@ -65,18 +84,37 @@ Params::toXml(QDomDocument& doc, QString const& name) const
 	
 	QDomElement el(doc.createElement(name));
 	el.appendChild(marshaller.dpi(m_dpi, "dpi"));
-    el.appendChild(marshaller.string(m_inputImageInfo.fileName, "input_filename"));
-    el.setAttribute("input_image_hash", (QString) m_inputImageInfo.imageHash.toHex());
-    el.setAttribute("input_image_color_mode", QString::number((int)m_inputImageInfo.imageColorMode));
+    el.setAttribute("djvu_filename", m_djvuFilename);
     el.setAttribute("djvu_filesize", m_djvuSize);
+    el.setAttribute("djvu_modified", m_djvuChanged.toString());
     el.setAttribute("djbz_id", m_djbzId);
     el.setAttribute("djbz_rev", m_djbzRevision);
     el.setAttribute("clean", m_clean);
     el.setAttribute("erosion", m_erosion);
     el.setAttribute("smooth", m_smooth);
+    el.setAttribute("bsf", m_bsf);
+    if (m_bsf > 1) {
+        el.setAttribute("method", scale_filter2str(m_scale_method));
+    }
+
+    el.setAttribute("fgbz", m_FGbz_options);
+    if (!m_colorRects.isEmpty()) {
+        el.setAttribute("fgbz_rects", colorRectsAsTxt());
+    }
+
+    if (!m_title.isEmpty()) {
+        el.setAttribute("title", m_title);
+    }
+
+    if (m_rotation) {
+        el.setAttribute("rotation", m_rotation);
+    }
+
     if (m_ptrOutputParams) {
         el.appendChild(m_ptrOutputParams->toXml(doc, "processed_with"));
     }
+
+    el.appendChild(m_sourceImagesInfo.toXml(doc, "source_images_info"));
 	return el;
 }
 
@@ -84,20 +122,130 @@ bool
 Params::operator !=(const Params &other) const
 {
     return (m_djvuSize != other.m_djvuSize ||
+            m_djvuFilename != other.m_djvuFilename ||
+            m_djvuChanged != other.m_djvuChanged ||
             m_djbzId != other.m_djbzId ||
             m_djbzRevision != other.m_djbzRevision ||
             m_clean != other.m_clean ||
             m_erosion != other.m_erosion ||
             m_smooth != other.m_smooth ||
             m_dpi != other.m_dpi ||
-            m_inputImageInfo != other.m_inputImageInfo);
+            m_bsf != other.m_bsf ||
+            m_scale_method != other.m_scale_method ||
+            m_FGbz_options != other.m_FGbz_options ||
+            m_colorRects != other.m_colorRects ||
+            m_title != other.m_title ||
+            m_rotation != other.m_rotation ||
+            m_sourceImagesInfo != other.m_sourceImagesInfo);
+}
+
+bool
+Params::matchJb2Part(const Params &other) const
+{
+    return (m_djvuFilename == other.m_djvuFilename &&
+            m_dpi          == other.m_dpi &&
+            m_djbzId       == other.m_djbzId &&
+            m_djbzRevision == other.m_djbzRevision &&
+            m_clean        == other.m_clean &&
+            m_erosion      == other.m_erosion &&
+            m_smooth       == other.m_smooth &&
+            m_dpi          == other.m_dpi &&
+            m_sourceImagesInfo.export_jb2Filename() ==
+            other.m_sourceImagesInfo.export_jb2Filename());
+}
+
+bool
+Params::matchBg44Part(const Params &other) const
+{
+    return (m_djvuFilename == other.m_djvuFilename &&
+            m_dpi          == other.m_dpi &&
+            m_bsf          == other.m_bsf &&
+            m_scale_method == other.m_scale_method &&
+            m_sourceImagesInfo.export_bg44Filename() ==
+            other.m_sourceImagesInfo.export_bg44Filename());
+}
+
+bool
+Params::matchAssemblePart(const Params &other) const
+{
+    return (m_FGbz_options == other.m_FGbz_options &&
+            m_colorRects == other.m_colorRects);
+}
+
+bool
+Params::matchPostprocessPart(const Params &other) const
+{
+    return (m_title == other.m_title &&
+            m_rotation == other.m_rotation);
 }
 
 void
 Params::rememberOutputParams(const DjbzParams &djbz_params)
 {
-    m_ptrOutputParams.reset( new OutputParams(*this, m_djbzId, m_djbzRevision, djbz_params
+    m_ptrOutputParams.reset( new OutputParams(*this,
+                                              m_djbzId, m_djbzRevision,
+                                              djbz_params)
+                             );
+}
+
+QString
+Params::colorRectsAsTxt() const
+{
+    QString res;
+    for (const QPair<QRect, QColor>& pair: qAsConst(m_colorRects)) {
+        const QRect r = pair.first;
+        res += QString("%1:%2,%3,%4,%5")
+                .arg(pair.second.name(QColor::HexRgb))
+                .arg(r.left())
+                .arg(r.top())
+                .arg(r.width())
+                .arg(r.height());
+    }
+    return res;
+}
+
+void
+Params::colorRectsFromTxt(const QString& txt)
+{
+    m_colorRects.clear();
+    if (txt.isEmpty()) {
+        return;
+    }
+    const QRegularExpression re("(#[0-9A-Fa-f]+):([0-9]+),([0-9]+),([0-9]+),([0-9]+)");
+    QRegularExpressionMatch m = re.match(txt);
+    while (m.hasMatch()) {
+        m_colorRects.append( QPair<QRect, QColor>(
+                                 QRect(m.captured(2).toInt(),
+                                       m.captured(3).toInt(),
+                                       m.captured(4).toInt(),
+                                       m.captured(5).toInt()),
+                                 QColor(m.captured(1))
                                  ));
+        m = re.match(txt, m.capturedEnd());
+    }
+}
+
+bool
+Params::containsColorRectsIn(const QRect& rect)
+{
+    for (const auto & pair: qAsConst(m_colorRects)) {
+        if (rect.intersects(pair.first)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void
+Params::removeColorRectsIn(const QRect& rect)
+{
+    for (auto it = m_colorRects.begin(); it != m_colorRects.end();) {
+        if (rect.intersects(it->first)) {
+            it = m_colorRects.erase(it);
+        } else {
+            it++;
+        }
+    }
 }
 
 } // namespace publish
